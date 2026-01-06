@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>N-Back Game (Animated)</title>
+    <title>N-Back Game (Animals)</title>
     <style>
         body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Segoe UI', Emoji, 'Apple Color Emoji', 'Symbola', sans-serif;
             text-align: center;
             background-color: #f0f2f5;
             color: #333;
@@ -31,6 +31,17 @@
         }
         select { font-size: 1.2rem; padding: 5px; margin: 10px; }
         
+        .option-label {
+            display: block;
+            margin-top: 15px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        input[type="checkbox"] {
+            transform: scale(1.2);
+            margin-right: 8px;
+        }
+
         .game-area {
             display: flex;
             flex-direction: column;
@@ -56,30 +67,26 @@
         }
 
         .main-card {
-            width: 120px;
-            height: 160px;
+            width: 140px;
+            height: 180px;
             background: white;
             border: 2px solid #333;
-            border-radius: 10px;
+            border-radius: 15px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 4rem;
-            font-weight: bold;
+            font-size: 5rem; /* 絵文字用に大きく */
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
             z-index: 10;
-            /* デフォルトの状態 */
             transform: scale(1);
         }
 
-        /* アニメーション定義: ポンッと出る動き */
+        /* ポンッと出るアニメーション */
         @keyframes popIn {
             0% { transform: scale(0.8); opacity: 0.5; border-color: #999; }
             60% { transform: scale(1.1); opacity: 1; border-color: #333; }
             100% { transform: scale(1); opacity: 1; }
         }
-
-        /* JSでこのクラスを付け外ししてアニメーションさせる */
         .pop-anim {
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
@@ -89,7 +96,11 @@
             gap: 10px;
             margin-top: 10px;
             opacity: 0.6;
+            min-height: 62px; /* 非表示時もレイアウトがガタつかないようにするならここを調整、今回はdisplay:noneで消します */
         }
+        /* JSで制御するためのクラス */
+        .hidden { display: none !important; }
+
         .back-card {
             width: 40px;
             height: 60px;
@@ -152,17 +163,22 @@
 
     <div id="start-screen" class="screen active">
         <div class="setup-box">
-            <h1>N-Back Game</h1>
-            <p>ルール: カードが次々とめくられます。<br><strong>N回前</strong>と同じ数字が出たらボタンを押してください。</p>
-            <label>Nの値を設定 (1-5):
+            <h1>N-Back: 動物編</h1>
+            <p><strong>N回前</strong>と同じ絵柄が出たらボタンを押してください。</p>
+            
+            <label>Nの値を設定:
                 <select id="n-value">
                     <option value="1">1-Back (簡単)</option>
                     <option value="2" selected>2-Back (普通)</option>
                     <option value="3">3-Back (難しい)</option>
-                    <option value="4">4-Back (超難問)</option>
-                    <option value="5">5-Back (鬼)</option>
                 </select>
             </label>
+
+            <label class="option-label">
+                <input type="checkbox" id="show-history-check" checked>
+                過去のカード（裏向き）を表示する
+            </label>
+
             <br><br>
             <button class="btn" onclick="startGame()">ゲームスタート</button>
         </div>
@@ -175,7 +191,7 @@
         </div>
 
         <div class="game-area">
-            <div class="past-cards">
+            <div id="past-cards-area" class="past-cards">
                 <div class="back-card"></div>
                 <div class="back-card"></div>
                 <div class="back-card"></div>
@@ -189,13 +205,13 @@
 
             <div id="feedback-msg" class="feedback"></div>
 
-            <button id="n-back-btn" class="btn" onclick="checkMatch()">N-BACK!</button>
+            <button id="n-back-btn" class="btn" onclick="checkMatch()">同じ！</button>
         </div>
     </div>
 
     <div id="result-screen" class="screen">
         <div class="score-board">
-            <h1>Game Over</h1>
+            <h1>終了！</h1>
             <h2>正答率: <span id="accuracy-display">0%</span></h2>
             <div class="score-detail">
                 <p>正解 (Hit): <span id="score-hit">0</span></p>
@@ -209,9 +225,12 @@
     </div>
 
     <script>
-        const TOTAL_CARDS = 15;
+        const TOTAL_CARDS = 15; // 15枚に変更
         const CARD_INTERVAL = 2000; 
         
+        // 絵柄の定義
+        const CARD_TYPES = ['🐕', '🐦', '🐟'];
+
         let nValue = 2;
         let deck = [];
         let currentIndex = -1;
@@ -230,15 +249,25 @@
         const feedbackMsg = document.getElementById('feedback-msg');
         const progressDisplay = document.getElementById('progress-display');
         const nbackBtn = document.getElementById('n-back-btn');
+        const pastCardsArea = document.getElementById('past-cards-area');
+        const showHistoryCheck = document.getElementById('show-history-check');
 
         function startGame() {
             nValue = parseInt(document.getElementById('n-value').value);
             document.getElementById('n-display').innerText = `N = ${nValue}`;
             
+            // 履歴表示の設定反映
+            if (showHistoryCheck.checked) {
+                pastCardsArea.classList.remove('hidden');
+            } else {
+                pastCardsArea.classList.add('hidden');
+            }
+
+            // デッキ生成（3種類からランダム）
             deck = [];
             for (let i = 0; i < TOTAL_CARDS; i++) {
-                // deck.push(Math.floor(Math.random() * (nValue+1)) + 1);
-                deck.push(Math.floor(Math.random() * 3) + 1);
+                const randomIcon = CARD_TYPES[Math.floor(Math.random() * CARD_TYPES.length)];
+                deck.push(randomIcon);
             }
 
             currentIndex = -1;
@@ -277,17 +306,11 @@
             nbackBtn.disabled = false;
             feedbackMsg.innerText = ""; 
 
-            // --- アニメーション処理の追加 ---
-            // 1. クラスを外す
+            // アニメーション処理
             mainCard.classList.remove('pop-anim');
-            // 2. ブラウザに「リフロー（再描画）」を強制させるトリック
-            // これがないと、同じクラスをすぐに付け直してもアニメーションが再生されません
             void mainCard.offsetWidth; 
-            // 3. 数字を更新
             mainCard.innerText = deck[currentIndex];
-            // 4. クラスを再度付けてアニメーション開始
             mainCard.classList.add('pop-anim');
-            // -----------------------------
 
             progressDisplay.innerText = `Card: ${currentIndex + 1}/${TOTAL_CARDS}`;
         }
@@ -297,13 +320,14 @@
             hasPressedButton = true;
             nbackBtn.disabled = true; 
 
-            const currentNum = deck[currentIndex];
-            if (currentIndex >= nValue && deck[currentIndex - nValue] === currentNum) {
+            const currentVal = deck[currentIndex];
+            // N回前と同じか判定
+            if (currentIndex >= nValue && deck[currentIndex - nValue] === currentVal) {
                 correctHits++;
-                showFeedback("正解！", "correct");
+                showFeedback("正解！⭕", "correct");
             } else {
                 falseAlarms++;
-                showFeedback("不正解...", "wrong");
+                showFeedback("違う！❌", "wrong");
             }
         }
 
