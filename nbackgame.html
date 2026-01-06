@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>N-Back Game</title>
+    <title>N-Back Game (Animated)</title>
     <style>
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -20,11 +20,9 @@
 
         h1 { margin-bottom: 10px; }
 
-        /* スクリーン切り替え用 */
         .screen { display: none; width: 100%; max-width: 600px; padding: 20px; box-sizing: border-box; }
         .active { display: block; }
 
-        /* スタート画面 */
         .setup-box {
             background: white;
             padding: 30px;
@@ -33,7 +31,6 @@
         }
         select { font-size: 1.2rem; padding: 5px; margin: 10px; }
         
-        /* ゲーム画面 */
         .game-area {
             display: flex;
             flex-direction: column;
@@ -49,7 +46,6 @@
             color: #555;
         }
 
-        /* カード表示エリア */
         .card-container {
             position: relative;
             height: 200px;
@@ -72,9 +68,22 @@
             font-weight: bold;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
             z-index: 10;
+            /* デフォルトの状態 */
+            transform: scale(1);
         }
 
-        /* 過去のカード（裏向き） */
+        /* アニメーション定義: ポンッと出る動き */
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0.5; border-color: #999; }
+            60% { transform: scale(1.1); opacity: 1; border-color: #333; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* JSでこのクラスを付け外ししてアニメーションさせる */
+        .pop-anim {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
         .past-cards {
             display: flex;
             gap: 10px;
@@ -96,7 +105,6 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
 
-        /* 操作ボタン */
         .btn {
             background-color: #007bff;
             color: white;
@@ -122,11 +130,11 @@
             height: 30px;
             font-weight: bold;
             font-size: 1.2rem;
+            transition: opacity 0.3s;
         }
         .feedback.correct { color: #28a745; }
         .feedback.wrong { color: #dc3545; }
 
-        /* 結果画面 */
         .score-board {
             background: white;
             padding: 30px;
@@ -162,7 +170,7 @@
 
     <div id="game-screen" class="screen">
         <div class="status-bar">
-            <span id="progress-display">Card: 0/50</span>
+            <span id="progress-display">Card: 0/15</span>
             <span id="n-display">N = 2</span>
         </div>
 
@@ -201,24 +209,20 @@
     </div>
 
     <script>
-        // 設定値
-        const TOTAL_CARDS = 50;
-        const CARD_INTERVAL = 2000; // 2秒ごとに更新
+        const TOTAL_CARDS = 15;
+        const CARD_INTERVAL = 2000; 
         
-        // 状態変数
         let nValue = 2;
         let deck = [];
         let currentIndex = -1;
         let gameInterval = null;
-        let hasPressedButton = false; // 今のカードでボタンを押したか
+        let hasPressedButton = false; 
 
-        // スコア用変数
-        let correctHits = 0;    // 正解数
-        let misses = 0;         // 見逃し
-        let falseAlarms = 0;    // お手つき
-        let targetCount = 0;    // 実際にマッチした回数
+        let correctHits = 0;
+        let misses = 0;
+        let falseAlarms = 0;
+        let targetCount = 0;
 
-        // DOM要素
         const startScreen = document.getElementById('start-screen');
         const gameScreen = document.getElementById('game-screen');
         const resultScreen = document.getElementById('result-screen');
@@ -227,103 +231,90 @@
         const progressDisplay = document.getElementById('progress-display');
         const nbackBtn = document.getElementById('n-back-btn');
 
-        // ゲーム開始
         function startGame() {
             nValue = parseInt(document.getElementById('n-value').value);
             document.getElementById('n-display').innerText = `N = ${nValue}`;
             
-            // デッキ生成 (1-5の乱数)
             deck = [];
             for (let i = 0; i < TOTAL_CARDS; i++) {
-                deck.push(Math.floor(Math.random() * 5) + 1);
+                // deck.push(Math.floor(Math.random() * (nValue+1)) + 1);
+                deck.push(Math.floor(Math.random() * 3) + 1);
             }
 
-            // 変数リセット
             currentIndex = -1;
             correctHits = 0;
             misses = 0;
             falseAlarms = 0;
             targetCount = 0;
             
-            // 画面切り替え
             startScreen.classList.remove('active');
             gameScreen.classList.add('active');
             resultScreen.classList.remove('active');
             
-            // カウントダウン的な間をおいて開始
             mainCard.innerText = "Ready";
             feedbackMsg.innerText = "";
             nbackBtn.disabled = true;
 
             setTimeout(() => {
-                nextCard(); // 最初の1枚
+                nextCard(); 
                 gameInterval = setInterval(nextCard, CARD_INTERVAL);
             }, 1000);
         }
 
-        // 次のカードへ
         function nextCard() {
-            // 前のカードの判定（見逃しチェック）
             if (currentIndex >= 0) {
                 checkMissed();
             }
 
             currentIndex++;
 
-            // 終了判定
             if (currentIndex >= TOTAL_CARDS) {
                 endGame();
                 return;
             }
 
-            // 状態更新
             hasPressedButton = false;
             nbackBtn.disabled = false;
             feedbackMsg.innerText = ""; 
 
-            // 表示更新
+            // --- アニメーション処理の追加 ---
+            // 1. クラスを外す
+            mainCard.classList.remove('pop-anim');
+            // 2. ブラウザに「リフロー（再描画）」を強制させるトリック
+            // これがないと、同じクラスをすぐに付け直してもアニメーションが再生されません
+            void mainCard.offsetWidth; 
+            // 3. 数字を更新
             mainCard.innerText = deck[currentIndex];
-            progressDisplay.innerText = `Card: ${currentIndex + 1}/${TOTAL_CARDS}`;
+            // 4. クラスを再度付けてアニメーション開始
+            mainCard.classList.add('pop-anim');
+            // -----------------------------
 
-            // ボタンの有効化判定 (N枚目までは押しても意味がないためグレーアウトするか、あるいは押させて失敗させるか。
-            // ここでは一貫性のために押せる状態にするが、N手前までは正解が存在しない。)
-            if (currentIndex < nValue) {
-                // まだNバックできない期間
-                // nbackBtn.disabled = true; // お好みで有効化してください
-            }
+            progressDisplay.innerText = `Card: ${currentIndex + 1}/${TOTAL_CARDS}`;
         }
 
-        // プレイヤーのアクション（ボタン押下）
         function checkMatch() {
-            if (hasPressedButton) return; // 連打防止
+            if (hasPressedButton) return; 
             hasPressedButton = true;
-            nbackBtn.disabled = true; // 1ターン1回のみ
+            nbackBtn.disabled = true; 
 
             const currentNum = deck[currentIndex];
-            // N回前が存在し、かつ一致するか
             if (currentIndex >= nValue && deck[currentIndex - nValue] === currentNum) {
-                // 正解！
                 correctHits++;
                 showFeedback("正解！", "correct");
             } else {
-                // お手つき！
                 falseAlarms++;
                 showFeedback("不正解...", "wrong");
             }
         }
 
-        // 見逃し判定（次のカードに行く直前に実行）
         function checkMissed() {
-            // N回前が存在するか
             if (currentIndex >= nValue) {
                 const isMatch = deck[currentIndex] === deck[currentIndex - nValue];
-                
                 if (isMatch) {
-                    // 本来はマッチしていた
                     if (!hasPressedButton) {
-                        misses++; // ボタンを押していなければ見逃し
+                        misses++; 
                     }
-                    targetCount++; // マッチ総数をカウント
+                    targetCount++; 
                 }
             }
         }
@@ -333,17 +324,11 @@
             feedbackMsg.className = "feedback " + type;
         }
 
-        // ゲーム終了処理
         function endGame() {
             clearInterval(gameInterval);
             gameScreen.classList.remove('active');
             resultScreen.classList.add('active');
 
-            // 集計
-            // 正答率の計算方法: (正解数) / (ターゲット総数) * 100
-            // もしくは、お手つきも減点要素にするなどルールはいろいろありますが、
-            // ここではシンプルに「出現したチャンスのうち、どれだけ拾えたか」を表示します。
-            
             let accuracy = 0;
             if (targetCount > 0) {
                 accuracy = Math.round((correctHits / targetCount) * 100);
